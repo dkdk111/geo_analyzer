@@ -120,7 +120,7 @@ class GEOAnalyzer:
     def generate_final_report(self, brand_name, results_json):
         """단계 3: 최종 마케팅 분석 보고서 생성"""
         prompt = f"""
-        당신은 전문 GEO 컨설턴트입니다. 진단 데이터({results_json})를 바탕으로 브랜드 '{brand_name}'을 위한 심층 진단 보고서를 한국어로 작성하십시오.
+        당신은 전문 GEO(Generative Engine Optimization) 컨설턴트입니다. 진단 데이터({results_json})를 바탕으로 브랜드 '{brand_name}'을 위한 심층 진단 보고서를 한국어로 작성하십시오.
         내용에는 GEO의 정의, 현재 노출 실태, 경쟁력 분석, 최적화 제언이 포함되어야 합니다.
         """
         response = self.openai_client.chat.completions.create(
