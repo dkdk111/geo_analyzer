@@ -173,3 +173,30 @@ if st.session_state.report:
                 st.success("상담 신청이 완료되었습니다. 담당 전문가가 곧 연락드리겠습니다.")
             else:
                 st.error("필수 정보를 입력해주세요.")
+
+st.divider()
+with st.expander("관리자 메뉴 (비공개)"):
+    admin_password = st.text_input("관리자 비밀번호", type="password")
+    # 본인만 알 수 있는 비밀번호를 정하세요 (예: 1234)
+    if admin_password == "1213": 
+        import sqlite3
+        import pandas as pd
+        
+        try:
+            conn = sqlite3.connect("inquiries.db")
+            # 데이터베이스 내용을 표로 불러오기
+            df = pd.read_sql_query("SELECT * FROM inquiries ORDER BY timestamp DESC", conn)
+            st.write("### 실시간 상담 신청 명단")
+            st.dataframe(df) # 웹에서 바로 명단 확인
+            
+            # 엑셀(CSV)로 다운로드 버튼
+            csv = df.to_csv(index=False).encode('utf-8-sig')
+            st.download_button(
+                label="전체 명단 다운로드 (CSV)",
+                data=csv,
+                file_name=f"inquiries_{datetime.datetime.now().strftime('%Y%m%d')}.csv",
+                mime="text/csv",
+            )
+            conn.close()
+        except Exception as e:
+            st.info("아직 등록된 상담 신청 내역이 없습니다.")
