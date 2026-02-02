@@ -13,11 +13,11 @@ load_dotenv()
 
 class GEOAnalyzer:
     def __init__(self):
-        # API 키 로드
+        # OpenAI 설정
         self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
         self.gpt_model = "gpt-4o-mini"
         
-        # Gemini 설정 (gemini-3-flash-preview 모델 강제 고정)
+        # Gemini 설정 (요청 모델 gemini-3-flash-preview 강제 고정)
         google_key = os.getenv("GOOGLE_API_KEY")
         if google_key:
             genai.configure(api_key=google_key)
@@ -26,28 +26,22 @@ class GEOAnalyzer:
         else:
             self.gemini_available = False
         
-        # DB 초기화
         self._init_db()
 
     def _init_db(self):
-        """상담 신청 저장을 위한 SQLite 데이터베이스 초기화"""
+        """데이터베이스 초기화"""
         with sqlite3.connect("inquiries.db", check_same_thread=False) as conn:
             cursor = conn.cursor()
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS inquiries (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    timestamp TEXT,
-                    brand TEXT,
-                    keyword TEXT,
-                    name TEXT,
-                    contact TEXT,
-                    message TEXT
+                    timestamp TEXT, brand TEXT, keyword TEXT, name TEXT, contact TEXT, message TEXT
                 )
             """)
             conn.commit()
 
     def save_inquiry(self, brand, keyword, name, contact, message):
-        """컨설팅 신청 데이터를 실제 DB에 저장"""
+        """상담 신청 저장"""
         with sqlite3.connect("inquiries.db", check_same_thread=False) as conn:
             cursor = conn.cursor()
             timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -58,7 +52,7 @@ class GEOAnalyzer:
             conn.commit()
 
     def check_visibility_logic(self, text, brand_name):
-        """브랜드명 노출 여부 물리적 매칭 검증"""
+        """브랜드 노출 물리적 검증 (공백 무시)"""
         if not text or not brand_name: return False
         def normalize(s):
             return re.sub(r'[^a-zA-Z0-9가-힣]', '', s).lower()
@@ -67,14 +61,17 @@ class GEOAnalyzer:
         return norm_brand in norm_text
 
     def generate_scenarios(self, brand_name, service_keyword):
-        """단계 1: 전략적 GEO 쿼리 생성"""
+        """단계 1: 전략적 쿼리 생성"""
         prompt = f"""
         당신은 전문 GEO(Generative Engine Optimization) 전략가입니다.
         브랜드: {brand_name}, 서비스: {service_keyword}
         
-        이 브랜드가 AI 답변에서 노출될 수밖에 없는 'GEO 테스트 질문' 3개를 한국어로 생성하세요.
-        - 질문자는 자신의 문제를 해결해줄 곳을 찾는 관점이어야 합니다.
-        - 브랜드명은 질문에 절대 포함하지 마십시오.
+        이 브랜드가 AI 답변에서 노출될 수밖에 없는 'GEO 최적화 테스트 질문' 3개를 한국어로 생성하세요.
+        지침:
+        1. 질문자는 자신의 문제를 해결해줄 곳을 찾는 관점이어야 합니다.
+        2. 질문에 브랜드명({brand_name})은 절대 포함하지 마십시오.
+        3. 모든 답변은 한국어로 작성하십시오.
+        
         JSON 형식: {{"strategy": "타겟팅 전략 설명", "queries": ["질문1", "질문2", "질문3"]}}
         """
         response = self.openai_client.chat.completions.create(
@@ -84,7 +81,7 @@ class GEOAnalyzer:
         return data["queries"], data["strategy"]
 
     def analyze_task(self, model_type, brand_name, question, q_idx):
-        """단계 2: 개별 AI 답변 수집 및 채점"""
+        """단계 2: 개별 AI 답변 수집 및 분석"""
         try:
             if model_type == "GPT":
                 res = self.openai_client.chat.completions.create(
@@ -101,6 +98,8 @@ class GEOAnalyzer:
             analysis_prompt = f"""
             AI 답변을 한국어로 진단하십시오. 브랜드: {brand_name}. 답변: {raw_text}.
             물리적 노출 여부: {actual_visibility}
+            
+            분석 지침: 물리적 노출 여부가 False라면 mentioned는 반드시 false여야 함.
             JSON 형식: {{
                 "mentioned": bool, 
                 "solution_fit": 1~10, 
@@ -120,8 +119,10 @@ class GEOAnalyzer:
     def generate_final_report(self, brand_name, results_json):
         """단계 3: 최종 마케팅 분석 보고서 생성"""
         prompt = f"""
-        당신은 전문 GEO(Generative Engine Optimization) 컨설턴트입니다. 진단 데이터({results_json})를 바탕으로 브랜드 '{brand_name}'을 위한 심층 진단 보고서를 한국어로 작성하십시오.
-        내용에는 GEO의 정의, 현재 노출 실태, 경쟁력 분석, 최적화 제언이 포함되어야 합니다.
+        당신은 전문 GEO(Generative Engine Optimization) 컨설턴트입니다. 
+        진단 데이터({results_json})를 바탕으로 브랜드 '{brand_name}'을 위한 심층 진단 보고서를 한국어로 작성하십시오.
+        내용에는 GEO의 정의, 현재 노출 실태, 미노출 시 비즈니스 리스크, 최적화 제언이 포함되어야 합니다.
+        전문적이고 설득력 있는 비즈니스 톤을 유지하십시오.
         """
         response = self.openai_client.chat.completions.create(
             model=self.gpt_model, messages=[{"role": "system", "content": prompt}]
